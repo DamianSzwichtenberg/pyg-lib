@@ -88,6 +88,7 @@ void biased_to_alias_helper(int64_t* rowptr_data,
                             const scalar_t* bias,
                             scalar_t* out_bias,
                             int64_t* alias) {
+  using Vec = at::vec::Vectorized<scalar_t>;
   scalar_t eps = 1e-6;
   at::parallel_for(
       0, rowptr_size - 1, at::internal::GRAIN_SIZE / rowptr_size,
@@ -98,14 +99,9 @@ void biased_to_alias_helper(int64_t* rowptr_data,
           size_t len = rowptr_data[i + 1] - rowptr_data[i];
           scalar_t* out_beg = out_bias + rowptr_data[i];
           int64_t* alias_beg = alias + rowptr_data[i];
-          scalar_t avg = 0;
-          size_t j_;
-#ifdef _OPENMP
-#pragma omp simd reduction(+ : avg) linear(j_ : 1)
-#endif
-          for (j_ = 0; j_ < len; j_++) {
-            avg += beg[j_];
-          }
+
+          scalar_t avg =
+              at::vec::reduce_all([](Vec a, Vec b) { return a + b; }, beg, len);
           avg /= len;
 
           // The sets for index with a bias lower or higher than average
@@ -113,9 +109,6 @@ void biased_to_alias_helper(int64_t* rowptr_data,
 
           low.reserve(len / 2 + 1);
           high.reserve(len / 2 + 1);
-#ifdef _OPENMP
-#pragma omp simd
-#endif
           for (size_t j = 0; j < len; j++) {
             scalar_t b = beg[j];
             // Allow some floating point error
