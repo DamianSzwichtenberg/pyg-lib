@@ -47,11 +47,12 @@ void biased_to_cdf_helper(int64_t* rowptr_data,
                        // Remember sum and current element to
                        // enable the in-place option (bias == cdf).
                        scalar_t sum = 0;
+                       size_t j_;
 #ifdef _OPENMP
-#pragma omp simd reduction(+ : sum)
+#pragma omp simd reduction(+ : sum) linear(j_ : 1)
 #endif
-                       for (size_t j = 0; j < len; j++) {
-                         sum += beg[j];
+                       for (j_ = 0; j_ < len; j_++) {
+                         sum += beg[j_];
                        }
 
                        scalar_t cur = sum;
@@ -105,11 +106,12 @@ void biased_to_alias_helper(int64_t* rowptr_data,
           scalar_t* out_beg = out_bias + rowptr_data[i];
           int64_t* alias_beg = alias + rowptr_data[i];
           scalar_t avg = 0;
+          size_t j_;
 #ifdef _OPENMP
-#pragma omp simd reduction(+ : avg)
+#pragma omp simd reduction(+ : avg) linear(j_ : 1)
 #endif
-          for (size_t j = 0; j < len; j++) {
-            avg += beg[j];
+          for (j_ = 0; j_ < len; j_++) {
+            avg += beg[j_];
           }
           avg /= len;
 
