@@ -39,39 +39,25 @@ void biased_to_cdf_helper(int64_t* rowptr_data,
                           const scalar_t* bias,
                           scalar_t* cdf) {
   using Vec = at::vec::Vectorized<scalar_t>;
+  at::parallel_for(0, rowptr_size - 1, at::internal::GRAIN_SIZE / rowptr_size,
+                   [&](size_t _s, size_t _e) {
+                     // CDF conversion for each row
+                     for (size_t i = _s; i < _e; i++) {
+                       const scalar_t* beg = bias + rowptr_data[i];
+                       size_t len = rowptr_data[i + 1] - rowptr_data[i];
+                       scalar_t* out_beg = cdf + rowptr_data[i];
 
-  at::parallel_for(
-      0, rowptr_size - 1, at::internal::GRAIN_SIZE / rowptr_size,
-      [&](int64_t _s, int64_t _e) {
-        // CDF conversion for each row
-        for (int64_t i = _s; i < _e; i++) {
-          const scalar_t* in_beg = bias + rowptr_data[i];
-          scalar_t* out_beg = cdf + rowptr_data[i];
-          int64_t len = rowptr_data[i + 1] - rowptr_data[i];
-          std::vector<scalar_t> shifted_prefix_sum(len,
-                                                   static_cast<scalar_t>(0));
-
-          for (int64_t j = 1; j < len; ++j) {
-            shifted_prefix_sum[j] = shifted_prefix_sum[j - 1] + in_beg[j - 1];
-          }
-          scalar_t sum = shifted_prefix_sum[len - 1] + in_beg[len - 1];
-          scalar_t* pref_beg = shifted_prefix_sum.data();
-
-          int64_t d = 0;
-          for (; d < len - (len % Vec::size()); d += Vec::size()) {
-            Vec data_vec = Vec::loadu(pref_beg + d);
-            Vec data_vec2 = Vec(sum);
-            Vec output_vec = data_vec / data_vec2;
-            output_vec.store(out_beg + d);
-          }
-          if (len - d > 0) {
-            Vec data_vec = Vec::loadu(pref_beg + d, len - d);
-            Vec data_vec2 = Vec(sum);
-            Vec output_vec = data_vec / data_vec2;
-            output_vec.store(out_beg + d, len - d);
-          }
-        }
-      });
+                       // Remember sum and current element to
+                       // enable the in-place option (bias == cdf).
+                       scalar_t sum = at::vec::reduce_all(
+                           [](Vec a, Vec b) { return a + b; }, beg, len);
+                       scalar_t cur = sum;
+                       for (size_t j = len; j > 0; j--) {
+                         cur -= beg[j - 1];
+                         out_beg[j - 1] = cur / sum;
+                       }
+                     }
+                   });
 }
 
 std::pair<at::Tensor, at::Tensor> biased_to_alias(at::Tensor rowptr,
