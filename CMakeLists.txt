@@ -47,6 +47,13 @@ if(OpenMP_CXX_FOUND)
   target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
 endif()
 
+set(BLA_VENDOR Intel10_64ilp)
+find_package(BLAS)
+if (BLAS_FOUND)
+  message("yaay")
+  # target_link_libraries(${PROJECT_NAME} PRIVATE ${BLAS_LIBRARIES})
+endif()
+
 if (USE_PYTHON)
   target_link_libraries(${PROJECT_NAME} PRIVATE Python3::Python)
 endif()
