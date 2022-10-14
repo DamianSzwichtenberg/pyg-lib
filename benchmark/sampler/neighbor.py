@@ -20,20 +20,23 @@ argparser.add_argument('--batch-sizes', nargs='+', type=int, default=[
 ])
 argparser.add_argument('--num_neighbors', type=ast.literal_eval, default=[
     [-1],
-    [15, 10, 5],
-    [20, 15, 10],
+    # [15, 10, 5],
+    # [20, 15, 10],
 ])
 argparser.add_argument('--replace', action='store_true')
 argparser.add_argument('--directed', action='store_true')
 argparser.add_argument('--shuffle', action='store_true')
 args = argparser.parse_args()
 
+# import os
+# print(os.getpid())
+# x = input()
 
 @withSeed
 @withDataset('DIMACS10', 'citationCiteseer')
 def test_neighbor(dataset, **kwargs):
     (rowptr, col), num_nodes = dataset, dataset[0].size(0) - 1
-    dgl_graph = dgl.graph(('csc', (rowptr, col, torch.arange(col.size(0)))))
+    # dgl_graph = dgl.graph(('csc', (rowptr, col, torch.arange(col.size(0)))))
 
     if args.shuffle:
         node_perm = torch.randperm(num_nodes)
@@ -57,6 +60,7 @@ def test_neighbor(dataset, **kwargs):
                 )
             pyg_lib_duration = time.perf_counter() - t
 
+            """
             t = time.perf_counter()
             for seed in tqdm(node_perm.split(batch_size)):
                 torch.ops.torch_sparse.neighbor_sample(
@@ -83,10 +87,10 @@ def test_neighbor(dataset, **kwargs):
             for _ in tqdm(dgl_loader):
                 pass
             dgl_duration = time.perf_counter() - t
-
+            """
             print(f'     pyg-lib={pyg_lib_duration:.3f} seconds')
-            print(f'torch-sparse={torch_sparse_duration:.3f} seconds')
-            print(f'         dgl={dgl_duration:.3f} seconds')
+            # print(f'torch-sparse={torch_sparse_duration:.3f} seconds')
+            # print(f'         dgl={dgl_duration:.3f} seconds')
             print()
 
 

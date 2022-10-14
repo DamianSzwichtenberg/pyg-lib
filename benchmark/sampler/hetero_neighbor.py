@@ -55,6 +55,7 @@ def test_hetero_neighbor(dataset, **kwargs):
                     seed_dict,
                     num_neighbors_dict,
                     None,  # time_dict
+                    None,
                     True,  # csc
                     False,  # replace
                     True,  # directed
