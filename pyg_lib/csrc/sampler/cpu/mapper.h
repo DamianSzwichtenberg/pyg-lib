@@ -19,8 +19,7 @@ class Mapper {
     // but slower hash map implementation. As a general rule of thumb, we are
     // safe to use vectors in case the number of nodes are small, or it is
     // expected that we sample a large amount of nodes.
-    // use_vec = (num_nodes < 1000000) || (num_entries > num_nodes / 10);
-    use_vec = true;
+    use_vec = (num_nodes < 1000000) || (num_entries > num_nodes / 10);
 
     if (num_nodes <= 0) {  // == `num_nodes` is undefined:
       use_vec = false;
@@ -43,7 +42,6 @@ class Mapper {
         auto old = to_local_vec[node];
         res = std::pair<scalar_t, bool>(old == -1 ? curr : old, old == -1);
         if (res.second)
-#pragma omp atomic write
           to_local_vec[node] = curr;
       }
     } else {
@@ -51,8 +49,7 @@ class Mapper {
       res = std::pair<scalar_t, bool>(out.first->second, out.second);
     }
     if (res.second) {
-#pragma omp atomic update
-      ++curr;
+      curr++;
     }
     return res;
   }
@@ -90,7 +87,7 @@ class Mapper {
 
   bool use_vec;
   std::vector<scalar_t> to_local_vec;
-  phmap::parallel_flat_hash_map<node_t, scalar_t> to_local_map;
+  phmap::flat_hash_map<node_t, scalar_t> to_local_map;
 };
 
 }  // namespace sampler

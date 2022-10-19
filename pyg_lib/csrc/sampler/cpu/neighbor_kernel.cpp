@@ -1,5 +1,4 @@
 #include <ATen/ATen.h>
-#include <omp.h>
 #include <torch/library.h>
 
 #include "parallel_hashmap/phmap.h"
@@ -112,7 +111,7 @@ class NeighborSampler {
                const scalar_t local_src_node,
                const scalar_t row_start,
                const scalar_t row_end,
-               const int64_t count,
+               const size_t count,
                pyg::sampler::Mapper<node_t, scalar_t>& dst_mapper,
                pyg::random::RandintEngine<scalar_t>& generator,
                std::vector<node_t>& out_global_dst_nodes) {
@@ -124,46 +123,11 @@ class NeighborSampler {
     if (population == 0)
       return;
 
-    // preparation for parallel execution
-    int64_t resize_step{0};
-    std::vector<scalar_t> generated;
-
-    if (count < 0 || (!replace && count >= population)) {
-      resize_step = population;
-    } else if (replace) {
-      for (int64_t i = 0; i < count; ++i) {
-        generated.push_back(generator(row_start, row_end));
-      }
-      resize_step =
-          std::set<scalar_t>(generated.begin(), generated.end()).size();
-    } else {
-      resize_step = count;
-    }
-
-    // std::cout << "Resize step: " << resize_step << std::endl;
-
-    int64_t out_id = out_global_dst_nodes.size();
-    int64_t sampled_id = sampled_rows_.size();
-    out_global_dst_nodes.resize(out_global_dst_nodes.size() + resize_step);
-    // TODO: cover here replace case, change resize_step
-    if (save_edges) {
-      sampled_rows_.resize(sampled_rows_.size() + resize_step);
-      sampled_cols_.resize(sampled_cols_.size() + resize_step);
-      if (save_edge_ids) {
-        sampled_edge_ids_.resize(sampled_edge_ids_.size() + resize_step);
-      }
-    }
-
-    int64_t block_size{64 / sizeof(scalar_t)};
-    int64_t num_blocks{(resize_step / block_size) + 1};
-
     // Case 1: Sample the full neighborhood:
     if (count < 0 || (!replace && count >= population)) {
-#pragma omp parallel for num_threads(num_blocks) schedule(static, block_size)
       for (scalar_t edge_id = row_start; edge_id < row_end; ++edge_id) {
-        int64_t offset = edge_id - row_start;
-        add_(edge_id, global_src_node, local_src_node, dst_mapper,
-             out_global_dst_nodes, out_id + offset, sampled_id + offset);
+        add(edge_id, global_src_node, local_src_node, dst_mapper,
+            out_global_dst_nodes);
       }
     }
 
@@ -209,29 +173,6 @@ class NeighborSampler {
       sampled_cols_.push_back(res.first);
       if (save_edge_ids) {
         sampled_edge_ids_.push_back(edge_id);
-      }
-    }
-  }
-
-  inline void add_(const scalar_t edge_id,
-                   const node_t global_src_node,
-                   const scalar_t local_src_node,
-                   pyg::sampler::Mapper<node_t, scalar_t>& dst_mapper,
-                   std::vector<node_t>& out_global_dst_nodes,
-                   size_t out_id,
-                   size_t sampled_id) {
-    const auto global_dst_node_value = col_[edge_id];
-    const auto global_dst_node =
-        to_node_t(global_dst_node_value, global_src_node);
-    const auto res = dst_mapper.insert(global_dst_node);
-    if (res.second) {  // not yet sampled.
-      out_global_dst_nodes[out_id] = global_dst_node;
-    }
-    if (save_edges) {
-      sampled_rows_[sampled_id] = local_src_node;
-      sampled_cols_[sampled_id] = res.first;
-      if (save_edge_ids) {
-        sampled_edge_ids_[sampled_id] = edge_id;
       }
     }
   }
